@@ -356,14 +356,21 @@ def _bridge_proxy_mode(ws: websocket.WebSocket) -> int:
     Returns:
       0 when either side closes.
     """
+
+    if sys.platform == 'win32':
+        import msvcrt
+        msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
+        msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
+
     stdin_fd = sys.stdin.buffer.fileno()
 
     def stdin_to_ws():
         try:
             while True:
-                ready, _, _ = select.select([stdin_fd], [], [], None)
-                if not ready:
-                    continue
+                if sys.platform != 'win32':
+                    ready, _, _ = select.select([stdin_fd], [], [], None)
+                    if not ready:
+                        continue
                 data = os.read(stdin_fd, 8192)
                 if not data:
                     break
@@ -547,7 +554,10 @@ def _install_rm_signal_handlers(do_rm: Callable[[], None]) -> None:
         do_rm()
         os._exit(0)
 
-    for sig in (signal.SIGHUP, signal.SIGTERM, signal.SIGINT):
+    signals = [signal.SIGTERM, signal.SIGINT]
+    if hasattr(signal, 'SIGHUP'):
+        signals.append(signal.SIGHUP)
+    for sig in signals:
         try:
             signal.signal(sig, _on_signal)
         except (ValueError, OSError):
